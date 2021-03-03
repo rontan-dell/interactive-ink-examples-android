@@ -2,13 +2,18 @@
 
 package com.myscript.iink.demo;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.content.res.AssetManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Bundle;
-import androidx.annotation.Nullable;
-import androidx.appcompat.app.AppCompatActivity;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.Menu;
@@ -17,7 +22,11 @@ import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.ListView;
 import android.widget.Toast;
+
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 
 import com.myscript.iink.Configuration;
 import com.myscript.iink.ContentBlock;
@@ -27,15 +36,20 @@ import com.myscript.iink.Editor;
 import com.myscript.iink.Engine;
 import com.myscript.iink.IEditorListener;
 import com.myscript.iink.MimeType;
-
-import com.myscript.iink.uireferenceimplementation.FontUtils;
-import com.myscript.iink.uireferenceimplementation.ImageLoader;
+import com.myscript.iink.graphics.Rectangle;
+import com.myscript.iink.graphics.Transform;
 import com.myscript.iink.uireferenceimplementation.EditorView;
+import com.myscript.iink.uireferenceimplementation.FontUtils;
 import com.myscript.iink.uireferenceimplementation.IInputControllerListener;
+import com.myscript.iink.uireferenceimplementation.ImageLoader;
 import com.myscript.iink.uireferenceimplementation.InputController;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.FilenameFilter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Map;
 
@@ -48,8 +62,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
   protected Engine engine;
 
   protected EditorView editorView;
-
+  Editor editor;
   protected DocumentController documentController;
+
+  public static final int PICK_IMAGE = 1;
+
+
+  ListView dropDownItems;
+  String[] image_menuitems = {
+          "Image Gallery",
+  };
 
   @Override
   protected void onCreate(@Nullable Bundle savedInstanceState)
@@ -59,6 +81,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     ErrorActivity.installHandler(this);
 
     engine = IInkApplication.getEngine();
+
+
 
     // configure recognition
     Configuration conf = engine.getConfiguration();
@@ -78,7 +102,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     editorView.setEngine(engine);
 
-    final Editor editor = editorView.getEditor();
+    editor = editorView.getEditor();
     editor.addListener(new IEditorListener()
     {
       @Override
@@ -225,14 +249,125 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         return documentController.export(null);
       case R.id.menu_newPackage:
         return documentController.newPackage();
-      case R.id.menu_openPackage:
-        return documentController.openPackage();
+      case R.id.menu_addImage:
+        return startGalleryPicker();
       case R.id.menu_savePackage:
         return documentController.savePackage();
+
       default:
         return super.onOptionsItemSelected(item);
     }
   }
+
+
+  private boolean startGalleryPicker() {
+    Intent getIntent = new Intent(Intent.ACTION_GET_CONTENT);
+    getIntent.setType("image/*");
+
+    Intent pickIntent = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+    pickIntent.setType("image/*");
+
+    Intent chooserIntent = Intent.createChooser(getIntent, "Select Image");
+    chooserIntent.putExtra(Intent.EXTRA_INITIAL_INTENTS, new Intent[] {pickIntent});
+
+    startActivityForResult(chooserIntent, PICK_IMAGE);
+    return true;
+  }
+
+  @Override
+  public void onActivityResult(int requestCode, int resultCode, Intent data)
+  {
+    super.onActivityResult(requestCode, resultCode, data);
+
+    if (requestCode == PICK_IMAGE && resultCode == Activity.RESULT_OK) {
+      if (data == null) {
+        Log.i(TAG, "onActivityResult - Did not pick image!");
+        return;
+      }
+
+      Log.i(TAG, "onActivityResult - Image Picked: " + data.getData());
+      addImageFromGallery(data.getData());
+    }
+    else {
+      Log.i(TAG, "onActivityResult - Unknown request code");
+    }
+  }
+
+  private void addImageFromGallery(Uri path) {
+    try {
+      InputStream inputStream = getContentResolver().openInputStream(path);
+      Bitmap bmp = BitmapFactory.decodeStream(inputStream);
+      Drawable d = new BitmapDrawable(getResources(), bmp);
+
+      int screenWidth = editorView.getWidth();
+      float convertedYInScreenSpace = getLowestAvailableY();
+      editorView.getRenderer().setViewOffset(0, convertedYInScreenSpace);
+      pasteAsImage(screenWidth / 2, 0, d);
+    } catch (FileNotFoundException e) {
+      Log.e(TAG, "File not found: " + path);
+    }
+  }
+
+  /**
+   * This method parses the object from gallery picker into a local file then adds the image
+   * @param x -- Coordinate
+   * @param y -- Coordinate
+   * @param obj -- Image drawable from local file
+   * @returns true
+   */
+  private boolean pasteAsImage(float x, float y, Object obj) {
+    //Drawable copiedImage = (Drawable)obj;
+    Bitmap copiedImage = ((BitmapDrawable)obj).getBitmap();
+
+    File file = new File(getExternalFilesDir(null), "pic.jpg");
+    FileOutputStream fos = null;
+    try {
+      fos = new FileOutputStream(file);
+      // Use the compress method on the BitMap object to write image to the OutputStream
+      copiedImage.compress(Bitmap.CompressFormat.JPEG, 100, fos);
+    }
+    catch (Exception e) {
+      Log.i(TAG, "Save Image Error: " + e.getMessage());
+    }
+    finally {
+      try {
+        fos.close();
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
+
+    try {
+      ContentBlock pastedBlock = editor.addImage(x, y, file, MimeType.JPEG);
+    }
+    catch (Exception e) {
+      Log.i(TAG, "Add Image Error: " + e.getMessage());
+    }
+
+    Log.i(TAG, "Pasted Image");
+
+    return true;
+  }
+
+  private float getLowestAvailableY() {
+    ContentBlock rootBlock = editor.getRootBlock();
+    float maxY = 0;
+    for (ContentBlock childBlock : rootBlock.getChildren()) {
+      Rectangle rect = childBlock.getBox();
+      maxY = Math.max(rect.y + rect.height, maxY);
+      Log.i(TAG, "X: " + rect.x + " | Y: " + rect.y + " | W: " + (rect.width) + " | H: " + (rect.height) + " | T: " + childBlock.getType());
+    }
+
+    com.myscript.iink.graphics.Point point = new com.myscript.iink.graphics.Point(0.0f, maxY + 1.0f);
+    Transform tr = editorView.getEditor().getRenderer().getViewTransform();
+    tr.ty = 0;
+    tr.apply(point);
+
+    Log.i(TAG, "Transformed X: " + point.x + " | Transformed Y: " + point.y);
+    return point.y;
+
+  }
+
 
   @Override
   public void onClick(View v)

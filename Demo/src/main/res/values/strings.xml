@@ -11,6 +11,7 @@
     <string name="menu_convert">Convert</string>
     <string name="menu_newPackage">New...</string>
     <string name="menu_openPackage">Open...</string>
+    <string name="menu_addImage">Add Image</string>
     <string name="menu_savePackage">Save</string>
     <string name="menu_export">Export</string>
     <string name="menu_newPart">New part...</string>

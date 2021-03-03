@@ -8,5 +8,6 @@
     <color name="toolbar_icon_enabled">#ffffffff</color>
     <color name="image_button_disabled">@android:color/darker_gray</color>
     <color name="image_button_enabled">@color/colorPrimary</color>
+    <color name="colorWhite">#ffffff</color>
 
 </resources>

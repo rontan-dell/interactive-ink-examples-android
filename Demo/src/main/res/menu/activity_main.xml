@@ -44,9 +44,9 @@
         app:showAsAction="never"
         android:title="@string/menu_newPackage"/>
     <item
-        android:id="@+id/menu_openPackage"
+        android:id="@+id/menu_addImage"
         app:showAsAction="never"
-        android:title="@string/menu_openPackage"/>
+        android:title="@string/menu_addImage"/>
     <item
         android:id="@+id/menu_savePackage"
         app:showAsAction="never"
